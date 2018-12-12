@@ -1,0 +1,182 @@
+--TEST 0001 IMPRIME el response
+--local res = ngx.location.capture("/cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion?" .. ngx.var.QUERY_STRING)
+--ngx.print(res.body)
+
+--Test: 0002
+--RECORRER CADA VALOR DEL QUERY STRING
+     --   local args = ngx.req.get_uri_args()
+     --    for key, val in pairs(args) do
+     --        if type(val) == "table" then
+     --            ngx.say(key, ": ", table.concat(val, ", "))
+     --        else
+     --            ngx.say(key, ": ", val)
+     --        end
+     --    end
+--IMPRIME:
+--tipoDeclaracion: I
+--numeroDeclaracion: 118102016030208
+
+--TEST 0003 IMPRIME QUERYSTRING
+--ngx.say(ngx.var.QUERY_STRING)
+--IMPRIME: numeroDeclaracion=118102016030208&tipoDeclaracion=I
+
+
+--
+-- TEST 0004 CONCATENACION QUERY STRING
+--local querystring = "/cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion?numeroDeclaracion=118102016030208&tipoDeclaracion=I"
+--local querystring = "/cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion?" .. ngx.var.QUERY_STRING
+--local res = ngx.location.capture(querystring)
+--ngx.print(res.body)
+
+----TEST 0005 IMPRIMIENDO VALORES
+--ngx.say("ngx.var.request_uri: " .. ngx.var.request_uri)
+--ngx.say("ngx.var.scheme: " .. ngx.var.scheme)
+--ngx.say("ngx.var.host: " .. ngx.var.host)
+--ngx.say("server_addr: ", ngx.var.server_addr)
+--ngx.say("server_port: ", ngx.var.server_port)
+--ngx.say("server_port: ", ngx.var.server_port)
+--ngx.say("ngx.var.uri: ", ngx.var.uri)
+--local endPoint = ngx.var.scheme .. "://" ..  ngx.var.host .. ":" .. ngx.var.server_port .. ngx.var.uri
+--ngx.say("endPoint: ", endPoint)
+
+--IMPRIME
+--ngx.var.request_uri: /cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion?numeroDeclaracion=118102016030208&tipoDeclaracion=I
+--ngx.var.scheme: http
+--ngx.var.host: 192.168.56.101
+--server_addr: 192.168.56.101
+--server_port: 8080
+--server_port: 8080
+--ngx.var.uri: /cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion
+--endPoint: http://192.168.56.101:8080/cl-at-iaingreso-declaracion-ws/declaracion/consultadeclaracion
+
+
+--TEST 0006 ENVIANDO A UN PROXY
+--ngx.exec("@proxy")
+
+local cjson = require "cjson"
+local inspect = require("inspect")
+
+--TEST001 CJSON
+local cjson = require "cjson"
+local inspect = require("inspect")
+
+--TEST001 CJSON
+local settings_json = "[{\"wifi\":{\"id\": \"wifi0001\", \"pass\": \"pass001\"}}, {\"wifi\":{\"id\": \"wifi0002\", \"pass\": \"pass002\"}}]"
+local settings = cjson.decode(settings_json) --PARSEA UN STRING A JSON
+--local wifi_config = settings[2].wifi
+--ngx.say("Two id: ", wifi_config.id) --Two id: wifi0001
+--ngx.say("Two pass: ", wifi_config.pass) --Two pass: pass001
+--ngx.print(inspect(wifi_config))
+--ngx.print(inspect(pairs(settings)))
+--ngx.print("\n")
+for i, value in pairs(settings) do
+	--ngx.print(i .. "\n") 1, 2
+	--ngx.print(inspect(value))
+	ngx.print(settings[i].wifi.id .. "\n")
+end
+
+--TEST002 CJSON-JWT
+local cjson = require "cjson"
+local inspect = require("inspect")
+local textJson = "[{\"api\":\"https://api.sunat.gob.pe\",\"recurso\":[{\"id\":\"/v1/contribuyente/contribuyentes\"}, {\"id\":\"/des/pathrecurso3\"}]}, {\"api\":\"https://e.factura.sunat.gob.pe\",\"recurso\":[{\"id\":\"/v1/contribuyente/contribuyentes\"}, {\"id\":\"/des/pathrecurso3\"}]}]"
+local parseJson = cjson.decode(textJson) --PARSEA UN STRING A JSON
+local apiValue = "https://api.sunat.gob.pe"
+for i, ivalue in pairs(parseJson) do
+	if(ivalue.api == apiValue) then
+		for j, jrecurso in pairs(ivalue.recurso) do
+			ngx.print(jrecurso.id .. "\n")
+		end
+	end
+end
+
+--IMPRIME
+--/v1/contribuyente/contribuyentes
+
+--/des/pathrecurso3
+
+
+
+location /lua_content {
+         # MIME type determined by default_type:
+         default_type 'text/plain';
+
+         content_by_lua_block {
+             ngx.say('Modulo de lua configurado correctamente')
+         }
+     }
+
+
+
+location /ws/controladuanero/ingreso/ {
+
+	#set $mymodeaud    $jwt_claim_aud;
+	#set $mymodesub 	  $jwt_claim_sub;
+
+	default_type application/xml;
+		
+	proxy_set_header Host 		   "api.sunat.peru";
+	proxy_set_header X-Real-IP 	   $remote_addr;
+	proxy_set_header X-Forwarded-Host  $host;
+	proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+	proxy_set_header X-Forwarded-Proto $scheme;
+
+	content_by_lua_file /etc/lua/probarclaimjwt.lua;
+
+		
+	proxy_http_version 1.1;
+}
+
+function GetValueFromXML(XML_string, XMLvalue)
+   local XMLvalueLength=string.len(XMLvalue)+2
+   local XMLvalueStartPos=string.find(XML_string,"<" .. XMLvalue .. ">")+XMLvalueLength
+   local XMLvalueEndPos=string.find(XML_string,"</" .. XMLvalue .. ">")
+   local ReturnValue=string.sub(XML_string,XMLvalueStartPos,XMLvalueEndPos-1)
+   return ReturnValue
+end
+
+ngx.req.read_body()  -- explicitly read the req body
+local bodyXml = ngx.req.get_body_data()
+
+local jwt_token = (GetValueFromXML(bodyXml,"ser:Token") .. "." .. GetValueFromXML(bodyXml,"ser:Sign"))
+
+ngx.req.set_header("Content-Type", "application/xml")
+ngx.req.set_header("authorization", "Bearer " .. jwt_token)
+ngx.exec('/validate-auid-indira');
+
+**************************************
+location ~ "^\/v1\/contribuyente\/contribuyentes\/(\d{11})\/(DATOS\_PRINCIPALES|DATOS\_SECUNDARIOS|DATOS\_ADICIONALES|NOMBRES\_HISTORICOS|DATOS\_PRINCIPALESNIDI|DATOS\_SECUNDARIOSNIDI|DATOS\_ADICIONALESNIDI)$" {
+	set $api_domain "contribuyente";
+	
+	proxy_set_header Host $apiSunatPeruHost;
+	proxy_set_header X-Real-IP $remote_addr;
+	proxy_set_header X-Forwarded-Host $host;
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	proxy_set_header X-Forwarded-Proto $scheme;
+	
+
+	#content_by_lua_file /etc/lua/validationAuid.lua;
+	
+	content_by_lua_block {
+             --ngx.say('Modulo de lua configurado correctamente' ..ngx.var.jwt_claim_aud)
+	     ngx.print('Modulo de lua configurado correctamente')
+
+        }
+
+	#set_by_lua_file $existAuid /etc/lua/validationAuid.lua;
+	
+	#if ($existAuid){
+	#	rewrite "^\/v1\/contribuyente\/contribuyentes\/(\d{11})\/(DATOS\_PRINCIPALES|DATOS\_SECUNDARIOS|DATOS\_ADICIONALES|NOMBRES\_HISTORICOS|DATOS\_PRINCIPALESNIDI|DATOS\_SECUNDARIOSNIDI|DATOS\_ADICIONALESNIDI)$" /v1/contribuyente/registro/e/contribuyentes/$1?f=$2 break;	    	
+	#	proxy_pass  http://upstreamApiSunatPeru;
+	#}
+	
+	#if ($existAuid = 0){	    
+	#    content_by_lua_block {
+        #	 ngx.exit(ngx.HTTP_UNAUTHORIZED)
+     	#    }	    
+	#}
+	
+	proxy_http_version 1.1;
+	
+}
+
+ngx.log(ngx.ERR, "set S")
